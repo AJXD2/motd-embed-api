@@ -13,3 +13,12 @@ wheels/
 .env
 .env.local
 .env.*.local
+
+# IDE and local settings
+.claude/
+.python-version
+
+# Development/reference files
+exported.py
+exportedcss.css
+from-reference.html
