@@ -1,0 +1,228 @@
+/* Optimized CSS for MOTD Embed - Only essential rules */
+
+/* Minecraft Font Faces */
+@font-face {
+    font-family: minecraft;
+    font-weight: 400;
+    src: url(./minecraft-normal-0000-07ff-MVYMY4PV.woff2);
+    unicode-range: U+0000-07ff;
+}
+
+@font-face {
+    font-family: minecraft;
+    font-weight: 800;
+    src: url(./minecraft-bold-0000-07ff-RJCHNFH7.woff2);
+    unicode-range: U+0000-07ff;
+}
+
+@font-face {
+    font-family: minecraft;
+    font-weight: 400;
+    font-style: italic;
+    src: url(./minecraft-italic-0000-07ff-XYDQN5QB.woff2);
+    unicode-range: U+0000-07ff;
+}
+
+@font-face {
+    font-family: minecraft;
+    font-weight: 400;
+    src: url(./minecraft-normal-2000-27ff-ACDQBGWR.woff2);
+    unicode-range: U+2000-27ff;
+}
+
+@font-face {
+    font-family: minecraft;
+    font-weight: 400;
+    src: url(./minecraft-special-normal-UVK4WBRP.woff2);
+}
+
+@font-face {
+    font-family: minecraft;
+    font-weight: 800;
+    src: url(./minecraft-special-bold-NUNIX3LG.woff2);
+}
+
+/* Editor Container */
+.editor-container {
+    position: relative;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.editor-container .editor-inner {
+    padding: 12px 20px 12px 12px;
+    display: flex;
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    min-height: 64px;
+    overflow: hidden;
+}
+
+.editor-container .editor-inner .server-icon {
+    margin-right: 6px;
+    flex-shrink: 0;
+    display: block !important;
+}
+
+.editor-container .server-icon {
+    position: relative;
+    display: block !important;
+}
+
+.editor-container .server-icon img {
+    width: 64px;
+    height: 64px;
+    display: block;
+}
+
+.editor-container .editor-inner .text {
+    font-size: 16px;
+    line-height: 14px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    max-width: 100%;
+}
+
+.editor-container .editor-inner .text .name {
+    color: #aaa;
+    white-space: pre-wrap;
+    margin-top: 1px;
+    font-family: minecraft, monospace;
+    outline: none;
+}
+
+.editor-container .editor-inner .editor {
+    margin-top: 6px;
+    line-height: 18px;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+/* MOTD Formatting */
+.mcformat-editor {
+    --shadow-offset: 2px;
+    --text-color: #FFFFFF;
+    --shadow-color: #3F3F3F;
+    display: flex;
+    flex-direction: column;
+}
+
+.mcformat-editor *:not(i) {
+    font-family: minecraft;
+}
+
+.mcformat-wrapper {
+    color: #fff;
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+}
+
+.mcformat {
+    white-space: pre-wrap;
+    color: var(--text-color);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+@supports (white-space: break-spaces) {
+    .mcformat {
+        white-space: break-spaces;
+    }
+}
+
+.mcformat-output {
+    outline: none;
+    flex-grow: 1;
+    display: flex;
+    word-break: break-word;
+    overflow: hidden;
+    width: 100%;
+    max-width: 100%;
+}
+
+.mcformat-code {
+    background-image: linear-gradient(rgba(255,255,255,.2),rgba(255,255,255,.2));
+    border-radius: 2px;
+    margin: 0 1px;
+    padding: 0 4px;
+    text-decoration: none;
+    font-style: normal;
+    font-weight: 400;
+    display: inline-block;
+}
+
+.mcformat-code-hidden .mcformat-code:not(.mcformat-code-invalid) {
+    display: none;
+}
+
+.mcformat-output:not(.mcformat-editing) .mcformat-code {
+    display: none;
+}
+
+/* Background */
+.mcformat-background {
+    background-image: url(./minecraft-background-dark-160x-K223BAAL.png);
+    background-repeat: repeat;
+    background-size: 80px;
+    image-rendering: pixelated;
+}
+
+.mcformat-motd .mcformat-output {
+    width: 100%;
+    max-width: 100%;
+}
+
+.mcformat-motd .mcformat-reset {
+    --text-color: #7e7e7e;
+}
+
+.mcformat-motd.mcformat-background {
+    background-image: url(./minecraft-background-dark-160x-K223BAAL.png);
+}
+
+/* Color Classes */
+.mcformat-black { --text-color: #000000; --shadow-color: #000000; }
+.mcformat-dark-blue { --text-color: #0000AA; --shadow-color: #00002A; }
+.mcformat-dark-green { --text-color: #00AA00; --shadow-color: #002A00; }
+.mcformat-dark-aqua { --text-color: #00AAAA; --shadow-color: #002A2A; }
+.mcformat-dark-red { --text-color: #AA0000; --shadow-color: #2A0000; }
+.mcformat-dark-purple { --text-color: #AA00AA; --shadow-color: #2A002A; }
+.mcformat-gold { --text-color: #FFAA00; --shadow-color: #2A2A00; }
+.mcformat-gray { --text-color: #AAAAAA; --shadow-color: #2A2A2A; }
+.mcformat-dark-gray { --text-color: #555555; --shadow-color: #151515; }
+.mcformat-blue { --text-color: #5555FF; --shadow-color: #15153F; }
+.mcformat-green { --text-color: #55FF55; --shadow-color: #153F15; }
+.mcformat-aqua { --text-color: #55FFFF; --shadow-color: #153F3F; }
+.mcformat-red { --text-color: #FF5555; --shadow-color: #3F1515; }
+.mcformat-light-purple { --text-color: #FF55FF; --shadow-color: #3F153F; }
+.mcformat-yellow { --text-color: #FFFF55; --shadow-color: #3F3F15; }
+.mcformat-white { --text-color: #FFFFFF; --shadow-color: #3F3F3F; }
+
+/* Format Classes */
+.mcformat-obfuscated { word-break: break-all; }
+.mcformat-bold, .mcformat-bold > .mcformat-code { font-weight: 800; }
+.mcformat-strikethrough, .mcformat-strikethrough > .mcformat-code, .mcformat-strikethrough .mcformat {
+    text-decoration: line-through;
+    text-decoration-thickness: .125em;
+}
+.mcformat-underline, .mcformat-underline > .mcformat-code, .mcformat-underline .mcformat {
+    text-decoration: underline;
+    text-decoration-thickness: .125em;
+    text-underline-offset: .125em;
+}
+.mcformat-underline .mcformat-strikethrough, .mcformat-strikethrough .mcformat-underline, .mcformat-underline.mcformat-strikethrough {
+    text-decoration: underline line-through;
+}
+.mcformat-italic, .mcformat-italic > .mcformat-code { font-style: italic; }
+.mcformat-reset { --text-color: #FFFFFF; }
