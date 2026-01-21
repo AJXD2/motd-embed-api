@@ -1,7 +1,8 @@
 # Minecraft MOTD Embed API
 
 A FastAPI-based web service that generates embeddable HTML for Minecraft server MOTDs (Message of the Day). Fetches live server status, parses Minecraft formatting codes, and generates styled HTML embeds.
-
+> [!NOTE]
+> I did not write a single line of code in this project. I wanted to test out the capabilities of claude code myself and I needed an app like this.
 ## Features
 
 - **Live Server Status**: Queries Minecraft servers in real-time
