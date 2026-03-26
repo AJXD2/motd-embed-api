@@ -4,17 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-FastAPI-based web service that generates embeddable HTML for Minecraft server MOTDs (Message of the Day). The API fetches live server status, parses Minecraft formatting codes, and generates styled HTML embeds.
+FastAPI-based web service that generates embeddable HTML and PNG images for Minecraft server MOTDs (Message of the Day). The API fetches live server status, parses Minecraft formatting codes, and returns styled HTML embeds or rasterised PNG images.
 
 ## Development Commands
 
 **Run the development server:**
 ```bash
-# With auto-reload for development
 RELOAD=true uv run motd-embed-api
-
-# Or directly with uv
-uv run motd-embed-api
 ```
 
 **Install dependencies:**
@@ -22,131 +18,145 @@ uv run motd-embed-api
 uv sync
 ```
 
-**Run with uvicorn directly:**
+**Run tests:**
 ```bash
-uv run uvicorn motd_embed_api.main:app --host 0.0.0.0 --port 8000 --reload
+uv run pytest
+# With coverage
+uv run pytest --cov=motd_embed_api
 ```
 
 **Docker deployment:**
 ```bash
-# Build and run with Docker Compose
 docker-compose up -d
-
-# Or build manually
-docker build -t motd-embed-api .
-docker run -p 8000:8000 motd-embed-api
-
-# View logs
 docker-compose logs -f
 ```
 
 ## Architecture
 
 ### Request Flow
-1. **API Endpoint** (`main.py`) - FastAPI routes receive embed requests
-2. **Cache Layer** (`cache.py`) - 30-second in-memory cache reduces server queries
-3. **Server Status** (`server.py`) - Fetches live Minecraft server data via mcstatus library
-4. **MOTD Parsing** (`motd_parser.py`) - Converts § formatting codes to HTML/CSS
-5. **HTML Generation** (`html_generator.py`) - Combines parsed data into embeddable HTML
+1. **Middleware** (`middleware.py`) — RequestID injection, security headers, structured JSON logging
+2. **Rate limiter** (`main.py`) — Per-IP limits via slowapi
+3. **API Endpoint** (`main.py`) — FastAPI routes; validates input, orchestrates response
+4. **Cache Layer** (`cache.py`) — TTL+LRU cache (default 30 s) reduces live queries
+5. **Server Status** (`server.py`) — Fetches live Minecraft server data via mcstatus; SSRF-safe
+6. **MOTD Parsing** (`motd_parser.py`) — Converts § formatting codes to HTML spans
+7. **HTML / Image Generation** (`html_generator.py`, `image_generator.py`) — Renders output
 
 ### Key Components
 
+**`config.py`**: Pydantic-settings `Settings` class
+- All tunable values live here; loaded once via `get_settings()` (lru_cache)
+- Rate limit strings validated at startup: must match `<count>/<period>`
+- `STATIC_DIR` env var overrides auto-detected path (useful for Docker volume mounts)
+
+**`main.py`**: FastAPI app
+- `lifespan` context validates static directory at startup and clears cache on shutdown
+- OpenAPI docs available at `/docs` and `/redoc`
+- `/metrics` registered only when `METRICS_ENABLED=true` (default); restrict at ingress in production
+
 **`server.py`**: Minecraft server communication
-- `get_server_info(ip)` - Main entry point for server data
-- Returns dict with: online status, MOTD text, players, version, favicon
-- Handles multiple MOTD formats (string, dict with 'text'/'extra', objects with attributes)
-- Default port: 25565, supports `host:port` format
+- `get_server_info(ip, timeout)` — main entry point
+- Blocks private/loopback IPs and non-Minecraft ports (SSRF protection)
+- Returns dict: `online`, `motd`, `server_name`, `players_online`, `players_max`, `version`, `favicon`
+- Default port 25565; supports `host:port` format
 
 **`motd_parser.py`**: Minecraft formatting code parser
-- Converts `§` codes (§a, §l, §r, etc.) to HTML spans with CSS classes
-- Color codes (0-9, a-f) reset previous colors but preserve formatting
-- Format codes (k, l, m, n, o) are additive
-- §r resets all formatting
-- Handles both legacy § codes and JSON text components
+- Converts `§` codes (§a, §l, §r, …) to HTML spans with CSS classes
+- Color codes reset color but preserve format; §r resets everything
+- Handles plain string, dict (`text`/`extra`), and object (`.text`/`.extra`) MOTD formats
 
-**`cache.py`**: Simple TTL-based caching
-- Global `_server_cache` instance with 30-second TTL
-- `get_cached_server_info(ip, fetch_func)` wraps server fetching
-- Reduces load on Minecraft servers for repeated requests
+**`cache.py`**: Thread-safe TTL+LRU cache
+- Lazy singleton via `get_cache()`; respects `CACHE_TTL_SECONDS` / `CACHE_MAXSIZE` settings
+- Prometheus hit/miss counters emitted via `metrics.py`
 
 **`html_generator.py`**: Embed HTML construction
-- Creates complete HTML document with inline styles
-- References `/static` for CSS and background images
-- Falls back to default icon if server provides no favicon
-- Uses data URI for server-provided favicons (base64)
+- Returns a self-contained HTML document; references `/static` for CSS
+- Validates and sanitises server favicon (size cap, base64 check) before embedding
+- Falls back to `/static/unknown_server.jpg` if no favicon
 
-### Static Assets
-The `static/` directory contains:
-- `motd-embed.css` - Minecraft-themed styling (mcformat classes)
-- `minecraft-background-dark-160x-K223BAAL.png` - Repeating background texture
-- `unknown_server.jpg` - Fallback server icon
+**`image_generator.py`**: Pillow PNG renderer
+- Renders a 500×90 PNG with tiled Minecraft background, server icon, name, and MOTD
+- Optional `static/Minecraft.ttf` for authentic font; falls back to PIL default
+- `STATIC_DIR` env var controls asset lookup (same as `config.py`)
+- Favicon validated (MIME type + byte budget) before decode; silent fallback on failure
+
+**`middleware.py`**: ASGI middleware stack
+- `RequestIDMiddleware` — injects/echoes `X-Request-ID`
+- `SecurityHeadersMiddleware` — CSP, HSTS, X-Content-Type-Options, etc.
+- `setup_logging()` — structured JSON log formatter attached to root logger
+
+**`metrics.py`**: Prometheus instrumentation
+- Counters: `cache_hits_total`, `cache_misses_total`
+- Histograms: `http_request_duration_seconds`
+- Exposed at `GET /metrics` (plain text Prometheus format)
+
+### Static Assets (`static/`)
+- `motd-embed.css` — Minecraft-themed CSS (`mcformat-*` classes)
+- `minecraft-background-dark-160x-K223BAAL.png` — repeating background texture
+- `unknown_server.jpg` — fallback server icon
+- `Minecraft.ttf` *(optional)* — TTF font for the image renderer
 
 ### API Endpoints
 
-**`GET /v1/server/{ip}/embed`**
-- Returns HTML embed for server MOTD
-- `{ip}` can be `hostname` or `hostname:port`
-- Response: HTML with embedded styles and server status
-- Uses caching to avoid rate-limiting
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health` | Health check — `{"status": "ok"}` |
+| `GET` | `/v1/server/{ip}/embed` | HTML embed for server MOTD |
+| `GET` | `/v1/server/{ip}/image` | 500×90 PNG image of the MOTD |
+| `GET` | `/metrics` | Prometheus scrape endpoint (when enabled) |
+| `GET` | `/docs` | Swagger UI |
+| `GET` | `/redoc` | ReDoc UI |
 
-**`GET /v1/server/{ip}/image`**
-- Placeholder for future image generation endpoint
-- Currently returns JSON with "not_implemented" status
+`{ip}` accepts `hostname` or `hostname:port`.
 
-**`GET /health`**
-- Health check endpoint
-- Returns `{"status": "ok"}`
+## Configuration
+
+All settings loaded from environment variables (or `.env` file). See `.env.example` for the full list.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HOST` | `0.0.0.0` | Bind address |
+| `PORT` | `8000` | Listen port |
+| `RELOAD` | `false` | uvicorn auto-reload (dev only) |
+| `LOG_LEVEL` | `info` | debug / info / warning / error / critical |
+| `ALLOWED_ORIGINS` | `*` | Comma-separated CORS origins |
+| `CACHE_TTL_SECONDS` | `30` | Server info cache lifetime |
+| `CACHE_MAXSIZE` | `1000` | Max cached entries |
+| `SERVER_TIMEOUT` | `5.0` | Minecraft query timeout (seconds) |
+| `RATE_LIMIT_EMBED` | `30/minute` | Rate limit for `/embed` |
+| `RATE_LIMIT_IMAGE` | `10/minute` | Rate limit for `/image` |
+| `RATE_LIMIT_HEALTH` | `60/minute` | Rate limit for `/health` |
+| `MOTD_MAX_LENGTH` | `2048` | Max MOTD character length |
+| `FAVICON_MAX_BYTES` | `150000` | Max favicon data URI size |
+| `STATIC_DIR` | *(auto)* | Override path to `static/` directory |
+| `METRICS_ENABLED` | `true` | Expose `/metrics` endpoint |
+
+**Setup:**
+```bash
+cp .env.example .env
+# edit .env for your environment
+```
 
 ## Code Patterns
 
 ### Error Handling
-- `ValueError` for invalid input (400 response)
-- Generic exceptions caught as 500 errors
-- Server offline returns valid response with "Server Offline" MOTD
-
-### MOTD Format Detection
-The parser handles three common MOTD formats from mcstatus:
-1. Plain string: `"Welcome to my server"`
-2. Dict with text/extra: `{"text": "Welcome", "extra": [...]}`
-3. Object with attributes: Object with `.text` and `.extra` properties
+- `ValueError` → 400 Bad Request
+- Unhandled exceptions → 500 Internal Server Error (details logged, not exposed)
+- Server offline → 200 with "Server Offline" MOTD (not an error)
 
 ### CSS Class Structure
-- `mcformat` - Base class for all formatted text
-- `mcformat-{color}` - Color classes (e.g., `mcformat-red`, `mcformat-blue`)
-- `mcformat-{format}` - Format classes (e.g., `mcformat-bold`, `mcformat-italic`)
-- `mcformat-code` - Displays § codes themselves
-- `mcformat-code-hidden` - Parent class to hide codes (used in output)
+- `mcformat` — base class for all formatted text
+- `mcformat-{color}` — color classes (e.g. `mcformat-red`, `mcformat-gold`)
+- `mcformat-{format}` — format classes (e.g. `mcformat-bold`, `mcformat-italic`)
 
 ## Dependencies
 
-- **fastapi** - Web framework
-- **uvicorn** - ASGI server
-- **mcstatus** - Minecraft server status protocol
-- **jinja2** - Template engine (FastAPI dependency)
-- Uses **uv** for dependency management (see pyproject.toml)
-
-## Configuration
-
-Configuration via environment variables (see `.env.example`):
-
-**Server Configuration:**
-- `HOST` - Host to bind to (default: `0.0.0.0`)
-- `PORT` - Server port (default: `8000`)
-- `RELOAD` - Enable auto-reload for development (default: `false`)
-- `LOG_LEVEL` - Logging level: debug, info, warning, error, critical (default: `info`)
-
-**CORS Configuration:**
-- `ALLOWED_ORIGINS` - Comma-separated allowed origins (default: `*`)
-  - For production, set to specific domains: `https://example.com,https://app.example.com`
-  - Using `*` with credentials is a security risk (now disabled)
-
-**Hardcoded values:**
-- Cache TTL: 30 seconds (in `cache.py`)
-- Minecraft server timeout: 5 seconds (in `server.py`)
-- Static files path: `{project_root}/static/`
-
-**Environment file:**
-```bash
-cp .env.example .env
-# Edit .env with your production settings
-```
+- **fastapi** — web framework
+- **uvicorn** — ASGI server
+- **mcstatus** — Minecraft server status protocol
+- **pydantic-settings** — typed environment config
+- **slowapi** — rate limiting
+- **cachetools** — TTL+LRU cache
+- **pillow** — PNG image generation
+- **prometheus-client** — metrics
+- **uv** — dependency management (see `pyproject.toml`)

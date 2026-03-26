@@ -1,16 +1,21 @@
 """HTML generation for Minecraft MOTD embeds"""
-from typing import Optional
+
+import base64
 import logging
+from typing import Optional
+
+from .metrics import FAVICON_REJECTIONS_TOTAL
 
 logger = logging.getLogger(__name__)
 
 
-def validate_favicon(favicon: str) -> bool:
+def validate_favicon(favicon: str, max_bytes: int = 150_000) -> bool:
     """
-    Validate that a favicon is a safe data URI.
+    Validate that a favicon is a safe data URI with valid base64 content.
 
     Args:
         favicon: Base64 favicon data URI
+        max_bytes: Maximum allowed byte length of the full data URI string
 
     Returns:
         True if valid and safe, False otherwise
@@ -18,12 +23,11 @@ def validate_favicon(favicon: str) -> bool:
     if not favicon:
         return False
 
-    # Must be a data URI
     if not favicon.startswith("data:"):
-        logger.warning(f"Favicon does not start with data: URI scheme")
+        logger.warning("Favicon does not start with data: URI scheme")
+        FAVICON_REJECTIONS_TOTAL.inc()
         return False
 
-    # Must be an image type
     allowed_types = [
         "data:image/png",
         "data:image/jpeg",
@@ -32,20 +36,28 @@ def validate_favicon(favicon: str) -> bool:
         "data:image/webp",
     ]
 
-    if not any(favicon.startswith(allowed_type) for allowed_type in allowed_types):
-        logger.warning(f"Favicon is not an allowed image type")
+    if not any(favicon.startswith(t) for t in allowed_types):
+        logger.warning("Favicon is not an allowed image type")
+        FAVICON_REJECTIONS_TOTAL.inc()
         return False
 
-    # Should contain base64 marker
     if "base64," not in favicon:
-        logger.warning(f"Favicon does not contain base64 marker")
+        logger.warning("Favicon does not contain base64 marker")
+        FAVICON_REJECTIONS_TOTAL.inc()
         return False
 
-    # Basic length check (prevent DoS via huge images)
-    # Minecraft favicons are typically small (64x64 PNG ~5-20KB base64)
-    # Allow up to 100KB base64 to be safe
-    if len(favicon) > 150000:  # ~100KB base64
-        logger.warning(f"Favicon exceeds maximum size")
+    if len(favicon) > max_bytes:
+        logger.warning("Favicon exceeds maximum size")
+        FAVICON_REJECTIONS_TOTAL.inc()
+        return False
+
+    # Verify the base64 payload is actually valid
+    try:
+        _, b64_data = favicon.split("base64,", 1)
+        base64.b64decode(b64_data, validate=True)
+    except Exception:
+        logger.warning("Favicon contains invalid base64 data")
+        FAVICON_REJECTIONS_TOTAL.inc()
         return False
 
     return True
@@ -55,37 +67,33 @@ def generate_embed_html(
     server_name: str,
     motd_html: str,
     favicon: Optional[str] = None,
-    base_url: str = "/static"
+    base_url: str = "/static",
+    favicon_max_bytes: int = 150_000,
 ) -> str:
     """
     Generate HTML embed for Minecraft server MOTD.
-    
+
     Args:
         server_name: Name of the server
         motd_html: Parsed MOTD HTML with formatting
         favicon: Base64 encoded favicon (optional)
         base_url: Base URL for static assets
-        
+        favicon_max_bytes: Maximum favicon size in bytes
+
     Returns:
         Complete HTML document string
     """
-    # Determine icon source
-    if favicon and validate_favicon(favicon):
-        # Use validated data URI for server favicon
+    if favicon and validate_favicon(favicon, max_bytes=favicon_max_bytes):
         icon_src = favicon
     else:
-        # Use fallback icon if no favicon or validation failed
-        if favicon and not validate_favicon(favicon):
-            logger.warning(f"Invalid or unsafe favicon rejected, using fallback")
+        if favicon:
+            logger.warning("Invalid or unsafe favicon rejected, using fallback")
         icon_src = f"{base_url}/unknown_server.jpg"
-    
-    # Escape server name for HTML
+
     safe_server_name = (
-        server_name.replace('&', '&amp;')
-        .replace('<', '&lt;')
-        .replace('>', '&gt;')
+        server_name.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     )
-    
+
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -135,5 +143,5 @@ def generate_embed_html(
     </div>
 </body>
 </html>"""
-    
+
     return html
