@@ -1,0 +1,11 @@
+# Override file — builds the image locally instead of pulling from GHCR.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: motd-embed-api:local
