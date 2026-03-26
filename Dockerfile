@@ -9,6 +9,12 @@ COPY --from=ghcr.io/astral-sh/uv:0.6 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
+# Install build tools needed to compile C extensions (e.g. brotli)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy dependency manifests first so Docker can cache this layer
 COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
