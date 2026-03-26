@@ -24,6 +24,7 @@ FROM python:3.12-slim
 # Patch OS packages for known CVEs
 RUN apt-get update && \
     apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends libjpeg62-turbo zlib1g libfreetype6 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
