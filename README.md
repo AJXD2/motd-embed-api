@@ -1,10 +1,15 @@
 # Minecraft MOTD Embed API
 
-A production-ready FastAPI service that generates embeddable **HTML** and **PNG images** for Minecraft server MOTDs.
-It fetches live server status via the Minecraft status protocol, parses `§` formatting codes, and serves styled responses suitable for embedding on any website.
+A FastAPI-based web service that generates embeddable HTML for Minecraft server MOTDs (Message of the Day). Fetches live server status, parses Minecraft formatting codes, and generates styled HTML embeds.
+> [!NOTE]
+> I did not write a single line of code in this project. I wanted to test out the capabilities of claude code myself and I needed an app like this.
+## Features
 
-[![CI](https://github.com/ajxd2/motd-embed-api/actions/workflows/ci.yml/badge.svg)](https://github.com/ajxd2/motd-embed-api/actions/workflows/ci.yml)
-[![Image](https://ghcr.io/ajxd2/motd-embed-api)](https://github.com/ajxd2/motd-embed-api/pkgs/container/motd-embed-api)
+- **Live Server Status**: Queries Minecraft servers in real-time
+- **MOTD Parsing**: Converts Minecraft § formatting codes to HTML/CSS
+- **Caching**: 30-second cache to reduce server load
+- **Embeddable**: Generate HTML embeds for use in websites
+- **Docker Support**: Production-ready containerized deployment
 
 ---
 
