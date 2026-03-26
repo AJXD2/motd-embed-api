@@ -10,7 +10,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.6 /uv /usr/local/bin/uv
 WORKDIR /app
 
 # Copy dependency manifests first so Docker can cache this layer
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
 
 # Install production dependencies into .venv; --frozen ensures lockfile is honoured
