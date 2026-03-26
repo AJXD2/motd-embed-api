@@ -1,284 +1,313 @@
 # Minecraft MOTD Embed API
 
-A FastAPI-based web service that generates embeddable HTML for Minecraft server MOTDs (Message of the Day). Fetches live server status, parses Minecraft formatting codes, and generates styled HTML embeds.
+A production-ready FastAPI service that generates embeddable **HTML** and **PNG images** for Minecraft server MOTDs.
+It fetches live server status via the Minecraft status protocol, parses `§` formatting codes, and serves styled responses suitable for embedding on any website.
+
+[![CI](https://github.com/ajxd2/motd-embed-api/actions/workflows/ci.yml/badge.svg)](https://github.com/ajxd2/motd-embed-api/actions/workflows/ci.yml)
+[![Image](https://ghcr.io/ajxd2/motd-embed-api)](https://github.com/ajxd2/motd-embed-api/pkgs/container/motd-embed-api)
+
+---
 
 ## Features
 
-- **Live Server Status**: Queries Minecraft servers in real-time
-- **MOTD Parsing**: Converts Minecraft § formatting codes to HTML/CSS
-- **Caching**: 30-second cache to reduce server load
-- **Embeddable**: Generate HTML embeds for use in websites
-- **Docker Support**: Production-ready containerized deployment
+| | |
+|---|---|
+| 🎨 **HTML embed** | Self-contained `<iframe>`-ready document with Minecraft-style colours & formatting |
+| 🖼️ **PNG image** | 500×90 rasterised image with server icon, name, and MOTD |
+| ⚡ **TTL cache** | 30-second per-IP cache — one live query per server per period |
+| 🛡️ **SSRF-safe** | Private/loopback IPs and non-Minecraft ports are blocked |
+| 📊 **Prometheus** | `/metrics` exposes cache hits, misses, and request latency |
+| 🔒 **Security headers** | CSP, HSTS, X-Frame-Options, X-Content-Type-Options on every response |
+| 🐳 **Docker-first** | Multi-stage image (~200 MB), runs as non-root, read-only FS |
 
-## Quick Start
+---
 
-### Using Docker (Recommended)
+## Quick start
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd motd-embed-api
-   ```
-
-2. **Start with Docker Compose**
-   ```bash
-   docker-compose up -d
-   ```
-
-3. **Access the API**
-   - API: http://localhost:8000
-   - Health check: http://localhost:8000/health
-   - Embed example: http://localhost:8000/v1/server/mc.hypixel.net/embed
-
-### Using Docker Build
+### Pull from GHCR (recommended)
 
 ```bash
-# Build the image
-docker build -t motd-embed-api .
-
-# Run the container
 docker run -d \
-  -p 8000:8000 \
   --name motd-embed-api \
-  -e ALLOWED_ORIGINS="https://example.com" \
-  motd-embed-api
+  -p 8000:8000 \
+  ghcr.io/ajxd2/motd-embed-api:latest
 ```
 
-### Local Development
+Then open:
 
-1. **Install dependencies**
-   ```bash
-   uv sync
-   ```
+```
+http://localhost:8000/v1/server/mc.hypixel.net/embed
+http://localhost:8000/v1/server/mc.hypixel.net/image
+http://localhost:8000/health
+http://localhost:8000/docs
+```
 
-2. **Run the development server**
-   ```bash
-   # With reload enabled
-   RELOAD=true uv run motd-embed-api
+### Docker Compose
 
-   # Or use uvicorn directly
-   uv run uvicorn motd_embed_api.main:app --reload
-   ```
+```bash
+# 1. Copy the example env file and edit it
+cp .env.example .env
 
-## API Endpoints
+# 2. Start the service (pulls image from GHCR)
+docker compose up -d
 
-### GET `/v1/server/{ip}/embed`
+# 3. Tail logs
+docker compose logs -f
 
-Returns an HTML embed for the specified Minecraft server's MOTD.
+# 4. Stop
+docker compose down
+```
 
-**Parameters:**
-- `ip` (path): Server address (e.g., `mc.hypixel.net` or `play.example.com:25565`)
+> **Local build instead of pulling?**
+> ```bash
+> docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+> ```
 
-**Example:**
+---
+
+## API reference
+
+Interactive docs are available at `/docs` (Swagger UI) and `/redoc`.
+
+### `GET /v1/server/{ip}/embed`
+
+Returns a self-contained HTML document rendering the server MOTD with Minecraft colour codes.
+Suitable for use in an `<iframe>`.
+
 ```bash
 curl http://localhost:8000/v1/server/mc.hypixel.net/embed
+curl http://localhost:8000/v1/server/play.example.com:25565/embed
 ```
 
-**Response:** HTML document with formatted MOTD
+| Status | Meaning |
+|--------|---------|
+| `200` | HTML embed (server may be offline — that's still a 200) |
+| `400` | Invalid address, private IP, or blocked port |
+| `429` | Rate limit exceeded |
 
-### GET `/v1/server/{ip}/image`
+### `GET /v1/server/{ip}/image`
 
-Placeholder endpoint for future image generation.
+Returns a 500×90 PNG image of the MOTD embed.
 
-**Response:** JSON indicating feature not yet implemented
+```bash
+curl -o motd.png http://localhost:8000/v1/server/mc.hypixel.net/image
+```
 
-### GET `/health`
+### `GET /health`
 
-Health check endpoint for monitoring and container orchestration.
-
-**Response:**
 ```json
 {"status": "ok"}
 ```
 
+### `GET /metrics`
+
+Prometheus text-format scrape endpoint.
+Enabled by default — **restrict access at your ingress/network layer in production** (no built-in auth).
+
+---
+
 ## Configuration
 
-Configuration is done via environment variables. See `.env.example` for all options.
+All settings are loaded from environment variables or a `.env` file.
 
-### Environment Variables
+```bash
+cp .env.example .env
+$EDITOR .env
+```
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `HOST` | `0.0.0.0` | Host to bind to |
-| `PORT` | `8000` | Port to run the server on |
-| `RELOAD` | `false` | Enable auto-reload (development only) |
-| `LOG_LEVEL` | `info` | Logging level (debug, info, warning, error, critical) |
-| `ALLOWED_ORIGINS` | `*` | CORS allowed origins (comma-separated) |
+| `HOST` | `0.0.0.0` | Bind address |
+| `PORT` | `8000` | Listen port |
+| `RELOAD` | `false` | uvicorn auto-reload — **dev only** |
+| `LOG_LEVEL` | `info` | `debug` / `info` / `warning` / `error` / `critical` |
+| `ALLOWED_ORIGINS` | `*` | Comma-separated CORS origins. Set to your domain(s) in production |
+| `CACHE_TTL_SECONDS` | `30` | How long server info is cached |
+| `CACHE_MAXSIZE` | `1000` | Maximum number of cached entries (LRU eviction) |
+| `SERVER_TIMEOUT` | `5.0` | Minecraft query timeout in seconds |
+| `RATE_LIMIT_EMBED` | `30/minute` | Per-IP rate limit for `/embed` |
+| `RATE_LIMIT_IMAGE` | `10/minute` | Per-IP rate limit for `/image` |
+| `RATE_LIMIT_HEALTH` | `60/minute` | Per-IP rate limit for `/health` |
+| `MOTD_MAX_LENGTH` | `2048` | Maximum MOTD character length |
+| `FAVICON_MAX_BYTES` | `150000` | Maximum favicon data URI size in bytes |
+| `STATIC_DIR` | *(auto)* | Override path to `static/` assets — set automatically to `/app/static` in Docker |
+| `METRICS_ENABLED` | `true` | Expose `/metrics` endpoint |
 
-### Production Configuration
+Rate limit strings must follow the format `<count>/<period>` where period is `second`, `minute`, `hour`, or `day`.
+Invalid values cause the application to fail at startup.
 
-For production deployment:
+---
 
-```bash
-# Copy example env file
-cp .env.example .env
+## Production checklist
 
-# Edit with production values
-nano .env
+- [ ] Set `ALLOWED_ORIGINS` to your specific domain(s)
+- [ ] Set `RELOAD=false`
+- [ ] Confirm `LOG_LEVEL=info` (or `warning`)
+- [ ] Restrict `/metrics` at your reverse proxy / firewall
+- [ ] Put a TLS-terminating reverse proxy (nginx / Traefik / Caddy) in front
+- [ ] Set up log aggregation (Loki, ELK, CloudWatch…)
+
+---
+
+## Reverse proxy
+
+### nginx
+
+```nginx
+upstream motd_api {
+    server 127.0.0.1:8000;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name api.example.com;
+
+    ssl_certificate     /etc/ssl/certs/api.example.com.crt;
+    ssl_certificate_key /etc/ssl/private/api.example.com.key;
+
+    location / {
+        proxy_pass http://motd_api;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 10s;
+        proxy_read_timeout    30s;
+    }
+
+    # Cache static assets at the edge
+    location /static/ {
+        proxy_pass http://motd_api/static/;
+        add_header Cache-Control "public, max-age=86400";
+    }
+
+    # Block external access to metrics
+    location /metrics {
+        deny all;
+    }
+}
 ```
 
-**Important:** Set `ALLOWED_ORIGINS` to specific domains in production:
-```env
-ALLOWED_ORIGINS=https://example.com,https://app.example.com
-```
+### Traefik (Docker labels)
 
-## Docker Deployment
-
-### Production Deployment
-
-1. **Configure environment variables**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your production settings
-   ```
-
-2. **Deploy with Docker Compose**
-   ```bash
-   docker-compose up -d
-   ```
-
-3. **View logs**
-   ```bash
-   docker-compose logs -f
-   ```
-
-4. **Stop the service**
-   ```bash
-   docker-compose down
-   ```
-
-### Kubernetes Deployment
-
-Example deployment manifest:
+Add to the `api` service in `docker-compose.yml`:
 
 ```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: motd-embed-api
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: motd-embed-api
-  template:
-    metadata:
-      labels:
-        app: motd-embed-api
-    spec:
-      containers:
-      - name: api
-        image: motd-embed-api:latest
-        ports:
-        - containerPort: 8000
-        env:
-        - name: ALLOWED_ORIGINS
-          value: "https://example.com"
-        - name: LOG_LEVEL
-          value: "info"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 5
-          periodSeconds: 30
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        resources:
-          limits:
-            cpu: "1"
-            memory: "512Mi"
-          requests:
-            cpu: "250m"
-            memory: "128Mi"
+labels:
+  - "traefik.enable=true"
+  - "traefik.http.routers.motd-api.rule=Host(`api.example.com`)"
+  - "traefik.http.routers.motd-api.entrypoints=websecure"
+  - "traefik.http.routers.motd-api.tls.certresolver=letsencrypt"
+  - "traefik.http.services.motd-api.loadbalancer.server.port=8000"
+  # Block /metrics from the outside
+  - "traefik.http.middlewares.strip-metrics.redirectregex.regex=^.*/metrics$$"
+  - "traefik.http.middlewares.strip-metrics.redirectregex.replacement=/"
+  - "traefik.http.routers.motd-api.middlewares=strip-metrics"
+```
+
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: motd-embed-api
-spec:
-  selector:
-    app: motd-embed-api
-  ports:
-  - port: 80
-    targetPort: 8000
-  type: LoadBalancer
+
+## Local development
+
+```bash
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install dependencies (including dev)
+uv sync
+
+# Run with auto-reload
+RELOAD=true uv run motd-embed-api
+
+# Run tests
+uv run pytest
+
+# Run tests with coverage
+uv run pytest --cov=motd_embed_api --cov-report=term-missing
+
+# Lint & format
+uv run ruff check src/ tests/
+uv run ruff format src/ tests/
 ```
 
-## Architecture
-
-```
-Request → FastAPI → Cache Layer → Server Status Fetcher → MOTD Parser → HTML Generator → Response
-```
-
-### Components
-
-- **`main.py`**: FastAPI application and routes
-- **`server.py`**: Minecraft server communication via mcstatus
-- **`motd_parser.py`**: Converts § formatting codes to HTML
-- **`html_generator.py`**: Generates embeddable HTML
-- **`cache.py`**: Simple TTL-based caching (30s default)
-
-### Static Assets
-
-The `static/` directory contains:
-- `motd-embed.css`: Minecraft-themed styling
-- `minecraft-background-dark-160x-K223BAAL.png`: Background texture
-- `unknown_server.jpg`: Fallback server icon
-
-## Development
-
-### Project Structure
+### Project layout
 
 ```
 motd-embed-api/
+├── .github/
+│   └── workflows/
+│       └── ci.yml              # Test → lint → build & push to GHCR
 ├── src/
 │   └── motd_embed_api/
-│       ├── __init__.py
-│       ├── main.py           # FastAPI app & routes
-│       ├── server.py          # Minecraft server queries
-│       ├── motd_parser.py     # MOTD formatting parser
-│       ├── html_generator.py  # HTML embed generation
-│       └── cache.py           # Caching layer
-├── static/                    # Static assets (CSS, images)
-├── Dockerfile
-├── docker-compose.yml
+│       ├── config.py           # Pydantic-settings (all env vars)
+│       ├── main.py             # FastAPI app, lifespan, routes
+│       ├── server.py           # Minecraft status queries (SSRF-safe)
+│       ├── motd_parser.py      # § code → HTML spans
+│       ├── html_generator.py   # Self-contained HTML embed
+│       ├── image_generator.py  # 500×90 PNG renderer (Pillow)
+│       ├── cache.py            # Thread-safe TTL+LRU cache
+│       ├── metrics.py          # Prometheus counters & histograms
+│       └── middleware.py       # RequestID, security headers, JSON logging
+├── static/
+│   ├── motd-embed.css
+│   ├── minecraft-background-dark-160x-K223BAAL.png
+│   ├── unknown_server.jpg
+│   └── Minecraft.ttf           # optional — place here for authentic font
+├── tests/                      # 111 pytest tests
+├── Dockerfile                  # Multi-stage, non-root, read-only FS
+├── docker-compose.yml          # Pulls from GHCR
+├── docker-compose.build.yml    # Override for local builds
 ├── pyproject.toml
-└── README.md
+└── .env.example
 ```
 
-### Running Tests
+---
+
+## CI / CD
+
+The GitHub Actions workflow at `.github/workflows/ci.yml` runs on every push and pull request:
+
+1. **Test** — runs the full pytest suite on Python 3.12 and 3.13
+2. **Lint** — ruff check + ruff format
+3. **Publish** — builds a multi-arch (`linux/amd64`, `linux/arm64`) image and pushes to GHCR
+
+Image tags produced:
+
+| Trigger | Tags |
+|---------|------|
+| Push to `main` | `latest`, `main`, `sha-<short>` |
+| Tag `v1.2.3` | `1.2.3`, `1.2`, `sha-<short>` |
+
+Pull a specific version:
 
 ```bash
-# TODO: Add tests
-pytest
+docker pull ghcr.io/ajxd2/motd-embed-api:1.2.3
+docker pull ghcr.io/ajxd2/motd-embed-api:sha-a1b2c3d
 ```
 
-### Code Quality
+---
 
+## Troubleshooting
+
+**Container won't start**
 ```bash
-# Format code
-uv run ruff format .
-
-# Lint code
-uv run ruff check .
+docker compose logs api
+# Common causes: port 8000 in use, invalid RATE_LIMIT_* format, missing static dir
 ```
 
-## Security Considerations
+**CORS errors in the browser**
+Make sure `ALLOWED_ORIGINS` matches your domain exactly — including the protocol (`https://`) and no trailing slash.
 
-- **CORS**: Configure `ALLOWED_ORIGINS` for production
-- **Rate Limiting**: Consider adding rate limiting middleware
-- **SSRF Protection**: Currently allows connections to any server
-- **Input Validation**: IP addresses are validated but not restricted
+**Slow responses**
+- Check if the target Minecraft server is reachable
+- Increase `SERVER_TIMEOUT` if the server is slow to respond
+- Cache hits should be near-instant; check `/metrics` for `cache_hits_total` vs `cache_misses_total`
+
+**`/metrics` returns 404**
+Set `METRICS_ENABLED=true` in your environment (it is `true` by default).
+
+---
 
 ## License
 
-[Add your license here]
-
-## Contributing
-
-[Add contribution guidelines here]
+MIT — see [LICENSE](LICENSE).

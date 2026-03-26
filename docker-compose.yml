@@ -1,52 +1,65 @@
+# Production-ready compose file.
+#
+# Pull the pre-built image from GHCR (default):
+#   docker compose up -d
+#
+# Build locally instead:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d
+
 services:
   api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: motd-embed-api:latest
+    image: ghcr.io/ajxd2/motd-embed-api:latest
     container_name: motd-embed-api
     restart: unless-stopped
+
     ports:
       - "${PORT:-8000}:8000"
+
+    # All settings can be overridden via a .env file at the project root.
+    # Copy .env.example → .env and edit before first run.
     environment:
-      # Server configuration
-      - HOST=0.0.0.0
-      - PORT=8000
-      - RELOAD=false
-      - LOG_LEVEL=${LOG_LEVEL:-info}
+      HOST: "0.0.0.0"
+      PORT: "8000"
+      RELOAD: "false"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-*}"
+      CACHE_TTL_SECONDS: "${CACHE_TTL_SECONDS:-30}"
+      CACHE_MAXSIZE: "${CACHE_MAXSIZE:-1000}"
+      SERVER_TIMEOUT: "${SERVER_TIMEOUT:-5.0}"
+      RATE_LIMIT_EMBED: "${RATE_LIMIT_EMBED:-30/minute}"
+      RATE_LIMIT_IMAGE: "${RATE_LIMIT_IMAGE:-10/minute}"
+      RATE_LIMIT_HEALTH: "${RATE_LIMIT_HEALTH:-60/minute}"
+      METRICS_ENABLED: "${METRICS_ENABLED:-true}"
+      STATIC_DIR: "/app/static"
 
-      # CORS configuration
-      # For production, set to specific domains: https://example.com,https://another.com
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
-
-    # Health check
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 5s
+      start_period: 15s
 
-    # Resource limits (adjust based on your needs)
     deploy:
       resources:
         limits:
-          cpus: '1.0'
+          cpus: "1.0"
           memory: 512M
         reservations:
-          cpus: '0.25'
+          cpus: "0.25"
           memory: 128M
 
-    # Security options
     security_opt:
       - no-new-privileges:true
     read_only: true
     tmpfs:
       - /tmp
 
-    # Logging configuration
     logging:
-      driver: "json-file"
+      driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
