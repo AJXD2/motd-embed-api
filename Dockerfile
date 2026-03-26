@@ -11,15 +11,21 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY src/ ./src/
 
+# Install Pillow build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libjpeg-dev zlib1g-dev libfreetype6-dev libbrotli-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies (without dev dependencies)
 RUN uv sync --frozen --no-dev
 
 # Production stage
 FROM python:3.14-slim
 
-# Install security updates
+# Install security updates and Pillow runtime libs
 RUN apt-get update && \
     apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends libjpeg62-turbo zlib1g libfreetype6 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

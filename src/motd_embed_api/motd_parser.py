@@ -33,6 +33,98 @@ FORMAT_CODES = {
 }
 
 
+# RGB color values matching motd-embed.css exactly: (text_rgb, shadow_rgb)
+COLOR_RGB = {
+    'mcformat-black':        ((0, 0, 0),         (0, 0, 0)),
+    'mcformat-dark-blue':    ((0, 0, 170),        (0, 0, 42)),
+    'mcformat-dark-green':   ((0, 170, 0),        (0, 42, 0)),
+    'mcformat-dark-aqua':    ((0, 170, 170),      (0, 42, 42)),
+    'mcformat-dark-red':     ((170, 0, 0),        (42, 0, 0)),
+    'mcformat-dark-purple':  ((170, 0, 170),      (42, 0, 42)),
+    'mcformat-gold':         ((255, 170, 0),      (42, 42, 0)),
+    'mcformat-gray':         ((170, 170, 170),    (42, 42, 42)),
+    'mcformat-dark-gray':    ((85, 85, 85),       (21, 21, 21)),
+    'mcformat-blue':         ((85, 85, 255),      (21, 21, 63)),
+    'mcformat-green':        ((85, 255, 85),      (21, 63, 21)),
+    'mcformat-aqua':         ((85, 255, 255),     (21, 63, 63)),
+    'mcformat-red':          ((255, 85, 85),      (63, 21, 21)),
+    'mcformat-light-purple': ((255, 85, 255),     (63, 21, 63)),
+    'mcformat-yellow':       ((255, 255, 85),     (63, 63, 21)),
+    'mcformat-white':        ((255, 255, 255),    (63, 63, 63)),
+}
+DEFAULT_COLOR = (255, 255, 255)
+DEFAULT_SHADOW = (63, 63, 63)
+
+
+def parse_motd_to_segments(motd_text: str) -> list:
+    """
+    Parse MOTD text with § formatting codes into structured segments for image rendering.
+
+    Args:
+        motd_text: Raw MOTD text with § codes
+
+    Returns:
+        List of dicts with keys: text, color, shadow, bold, italic, underline, strikethrough
+    """
+    if not motd_text:
+        return []
+
+    parts = re.split(r'(§[0-9a-fk-or]|\n)', motd_text, flags=re.IGNORECASE)
+
+    segments = []
+    current_color_class = None
+    bold = False
+    italic = False
+    underline = False
+    strikethrough = False
+
+    for part in parts:
+        if not part:
+            continue
+
+        if part == '\n':
+            segments.append({
+                "text": "\n",
+                "color": DEFAULT_COLOR,
+                "shadow": DEFAULT_SHADOW,
+                "bold": bold,
+                "italic": italic,
+                "underline": underline,
+                "strikethrough": strikethrough,
+            })
+            continue
+
+        if part.startswith('§') and len(part) == 2:
+            code = part[1].lower()
+            if code == 'r':
+                current_color_class = None
+                bold = italic = underline = strikethrough = False
+            elif code in COLOR_CODES:
+                current_color_class = COLOR_CODES[code]
+                # Color codes reset bold in Minecraft (mirrors parse_motd behavior)
+            elif code == 'l':
+                bold = True
+            elif code == 'm':
+                strikethrough = True
+            elif code == 'n':
+                underline = True
+            elif code == 'o':
+                italic = True
+        else:
+            color, shadow = COLOR_RGB.get(current_color_class, (DEFAULT_COLOR, DEFAULT_SHADOW))
+            segments.append({
+                "text": part,
+                "color": color,
+                "shadow": shadow,
+                "bold": bold,
+                "italic": italic,
+                "underline": underline,
+                "strikethrough": strikethrough,
+            })
+
+    return segments
+
+
 def parse_motd(motd_text: str) -> str:
     """
     Parse MOTD text with § formatting codes and convert to HTML.

@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Path, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -8,7 +8,8 @@ from slowapi.errors import RateLimitExceeded
 import os
 import logging
 from .server import get_server_info
-from .motd_parser import parse_motd
+from .motd_parser import parse_motd, parse_motd_to_segments
+from .image_generator import generate_server_image
 from .html_generator import generate_embed_html
 from .cache import get_cached_server_info
 
@@ -90,23 +91,35 @@ async def get_server_embed(
 
 
 @app.get("/v1/server/{ip}/image")
+@limiter.limit("30/minute")
 async def get_server_image(
+    request: Request,
     ip: str = Path(..., description="Server IP address (can include port as ip:port)")
 ):
     """
-    Placeholder endpoint for future image generation.
-    
+    Get a PNG image embed for Minecraft server MOTD.
+
     Args:
         ip: Server address (host or host:port)
-        
+
     Returns:
-        JSON response indicating feature not yet implemented
+        PNG image response with Minecraft-styled MOTD
     """
-    return {
-        "status": "not_implemented",
-        "message": "Image generation endpoint coming soon",
-        "server": ip
-    }
+    try:
+        server_info = get_cached_server_info(ip, get_server_info)
+        segments = parse_motd_to_segments(server_info["motd"])
+        png_bytes = generate_server_image(
+            server_name=ip,
+            motd_segments=segments,
+            favicon_b64=server_info.get("favicon"),
+        )
+        return Response(content=png_bytes, media_type="image/png")
+    except ValueError as e:
+        logger.warning(f"Invalid request for server {ip}: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error generating image for server {ip}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 def main() -> None:

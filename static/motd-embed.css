@@ -116,7 +116,7 @@
 }
 
 .mcformat-editor *:not(i) {
-    font-family: minecraft;
+    font-family: minecraft, sans-serif;
 }
 
 .mcformat-wrapper {
